@@ -1,0 +1,102 @@
+#!/usr/bin/env python3
+
+"""
+Cycle through user folders in office365.
+
+arguments:
+    next    cycle from top to bottom (default)
+    prev    cycle from bottom to top
+
+binding exemple:
+    :bind « spawn -u cycle_owa
+    :bind « spawn -u cycle_owa next
+    :bind » spawn -u cycle_owa prev
+"""
+
+from os  import environ
+from re  import findall
+from sys import argv, exit
+
+import xml.etree.ElementTree as ET
+
+def extract_html(data, attrib):
+    """Extract single tag based on `attrib`."""
+    regex = '<[^>]+' + attrib + '[^>]+>[^<]*</[^>]+>'
+    tag   = findall(regex, data)
+
+    return ''.join(tag)
+
+
+def get_open_folder(html):
+    """Get the current opened folder."""
+    label = 'folderHeaderLabel'
+
+    for line in html:
+        if line.find(label) > 0:
+            root = ET.fromstring(extract_html(line, label))
+            break
+
+    return root.text
+
+
+def get_list_folders(html):
+    """Get all user folders in owa interface."""
+    label   = 'subfolders'
+    folders = []
+
+    for line in html:
+        if line.find(label) > 0:
+            content = '<sf>' + extract_html(line, label) + '</sf>'
+            break
+
+    root = ET.fromstring(content)
+
+    for i in root.iter():
+        if i.attrib:
+            folders.append((i.attrib['aria-label'], i.attrib['id']))
+
+    return folders
+
+
+def set_next_folder(current, folders, order="next"):
+    """Compare and set next folder."""
+    if order == "next":
+        folders.reverse()
+
+    item = first = folders.pop()
+
+    while item[0] != current:
+        item = folders.pop()
+
+    try:
+        item = folders.pop()
+
+    except IndexError:
+        item = first
+
+    return item[1].replace('.subfolders', '.folder')
+
+
+def main():
+    with open(environ['QUTE_HTML'], 'r') as html:
+        html_file = html.readlines()
+
+    try:
+        order = argv[1]
+
+        if order != "next" and order != "prev":
+            exit("should call \"next\" or \"prev\"")
+
+    except IndexError:
+        order = "next"
+
+    open_folder  = get_open_folder(html_file)
+    list_folders = get_list_folders(html_file)
+    next_folder  = set_next_folder(open_folder, list_folders, order)
+
+    with open(environ['QUTE_FIFO'], 'w') as fifo:
+        fifo.write('click-element -f id %s\n' % next_folder)
+
+
+if __name__ == '__main__':
+    main()
