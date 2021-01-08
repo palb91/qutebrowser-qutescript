@@ -1,0 +1,48 @@
+#!/bin/bash
+
+# Log in qutebrowser
+log() { echo "${*}" >> "${QUTE_FIFO}"; }
+
+# Local storage
+DIR="${HOME}/src"
+
+# Rewrite URL
+QUTE_URL="${QUTE_URL%%\#*}"
+QUTE_URL="${QUTE_URL%%\?*}"
+QUTE_URL="${QUTE_URL%%\&*}"
+
+# Distant domain
+DOMAIN="${QUTE_URL#*//}"
+DOMAIN="${DOMAIN%%/*}"
+DOMAIN="${DOMAIN//\\~/~}"
+
+# Repository name
+REPO="${QUTE_URL#*${DOMAIN}/}"
+REPO="${REPO%/}"
+
+# Local repository storage
+LOCAL_REPO="${DIR}/${DOMAIN}/${REPO}"
+
+# Repository already cloned ?
+if [ -d "${LOCAL_REPO}/.git" ]; then
+    log "message-warning '${REPO} already cloned'"
+    exit 0
+fi
+
+# Clone or print error
+if ! git clone "${QUTE_URL%/}.git" "${LOCAL_REPO}"; then
+    log "message-error 'Error while cloning ${DOMAIN}/${REPO}'"
+    rmdir --ignore-fail-on-non-empty -p "${LOCAL_REPO}"
+    exit 1
+fi
+
+# TODO check why some folders are not removed
+if [ ! -d "${LOCAL_REPO}"/.git ]; then
+    rmdir --ignore-fail-on-non-empty -p "${LOCAL_REPO}"
+    log "message-warning 'An error occured, git clone failed...'"
+    exit 1
+fi
+
+# Allright!
+log "message-info '${LOCAL_REPO} successfully cloned'"
+exit 0

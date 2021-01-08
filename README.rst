@@ -69,3 +69,14 @@ Can be use as standalone or as userscript.
             :bind('<Alt-u>', 'spawn -u -- wl-pass type user', mode='insert')
             :bind('<Alt-p>', 'spawn -u -- wl-pass type pass', mode='insert')
             :bind('<Alt-l>', 'spawn -u -- wl-pass type both', mode='insert')
+
+
+qbclone
+=======
+
+Clone current git repository (error-prone but useful).
+
+::
+
+    In config.py:
+        bind('gc', 'spawn -u -- qbclone')
