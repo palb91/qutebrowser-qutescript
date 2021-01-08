@@ -18,7 +18,7 @@ qutebrowser userscript.
 
 Usage:
     ${0##*/}
-    ${0##*/} type [-q] <user|pass|both> [URL]
+    ${0##*/} type <user|pass|both> [URL]
     ${0##*/} copy <user|pass>      [URL]
     ${0##*/} help
 
@@ -156,7 +156,9 @@ both=( "${user}" -k Tab "${pass}" )
 if [[ -z "${cmd}" ]]; then
     choices=( "type user" "type pass" "type both"
               "copy user" "copy pass"             )
-    cmd="$(printf '%s\n' "${choices[@]}" | bemenu -paction:)"
+    tmp="$(printf '%s\n' "${choices[@]}" | bemenu -paction:)"
+    cmd="${tmp%% *}"
+    asset="${tmp##* }"
 fi
 
 
@@ -165,7 +167,7 @@ fi
 
 
 # Execute (Last log: bemenu can accept any string, even not listed in menu)
-case "${cmd}" in
+case "${cmd} ${asset}" in
     'type user') wtype -s 300 "${user}"           ;;
     'type pass') wtype -s 300 "${pass}"           ;;
     'type both') wtype -s 300 "${both[@]}"        ;;
