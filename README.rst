@@ -1,10 +1,10 @@
 =======================
-Qutebrowser Userscripts
+Qutebrowser qutescripts
 =======================
 
     :Author:      palb91
     :Licence:     MIT
-    :Description: *Personal Qutebrowser userscripts*
+    :Description: *Personal Qutebrowser qutescripts*
     :Languages:   Python, Bash
 
 cycle-owa
