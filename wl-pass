@@ -1,0 +1,178 @@
+#!/bin/bash
+#
+# © 2020 Pierre-Albéric TROUPLIN (palb91)
+
+
+# Environments
+passdir="${PASSWORD_STORE_DIR:-${HOME}/.password-store}"
+cmd=
+asset=
+url="${QUTE_URL:-}"
+
+
+# Utils
+help() {
+    cat <<HELP
+Type or copy \`pass\` passwords in Wayland windows. Can be used as a
+qutebrowser userscript.
+
+Usage:
+    ${0##*/}
+    ${0##*/} type [-q] <user|pass|both> [URL]
+    ${0##*/} copy <user|pass>      [URL]
+    ${0##*/} help
+
+Command:
+    type        Type the requested argument using wtype.
+    copy        Copy the requested argument using wl-copy.
+    help        Print this help.
+    NONE        bemenu will be invoked to know what to do.
+
+Arguments:
+    user        "username: user" in the pass file.
+    pass        First line in the pass file.
+    both        Type only, will output "username<Tab>password".
+    NONE        bemeny will be invoked to know the target
+    URL         ${0##*/} will try to find a matching result in
+                the password-store (and invoke bemenu when there
+                is more than one result).
+
+As qutebrowser userscript:
+    Copy the script in: ~/.local/share/qutebrowser/userscripts
+    Then map in ~/.config/qutebrowser/config.py, example:
+
+        :bind('<Alt-u>', 'spawn -u -- wl-pass type user')
+        :bind('<Alt-p>', 'spawn -u -- wl-pass type pass')
+        :bind('<Alt-l>', 'spawn -u -- wl-pass type both')
+        :bind('<Alt-u>', 'spawn -u -- wl-pass type user', mode='insert')
+        :bind('<Alt-p>', 'spawn -u -- wl-pass type pass', mode='insert')
+        :bind('<Alt-l>', 'spawn -u -- wl-pass type both', mode='insert')
+HELP
+
+    exit "${1:-0}"
+}
+
+# stdout or QUTE_FIFO
+log() {
+    [[ -n "${QUTE_URL}" ]]                                   \
+        && printf 'message-info "%s"' "${*}" >"${QUTE_FIFO}" \
+        || echo "${*}"
+    exit 0
+}
+die() {
+    [[ -n "${QUTE_URL}" ]]                                    \
+        && printf 'message-error "%s"' "${*}" >"${QUTE_FIFO}" \
+        || printf '%s\n'               "${*}" >&2
+    help 1
+}
+
+
+# Help
+case "${1}" in -h|--help|help) help 0 ;; esac
+
+
+# Validate command parameters
+case "${#}" in
+    0)                                       ;;
+    2) cmd="${1}"; asset="${2}"              ;;
+    3) cmd="${1}"; asset="${2}"; url="${3}"  ;;
+    *) die 'Wrong number of arguments'       ;;
+esac
+
+# Validate cmd
+case "${cmd}" in
+    '')                                      ;;
+    'type')                                  ;;
+    'copy')                                  ;;
+    'help') help 0                           ;;
+    *)      die "Command ${cmd} not allowed" ;;
+esac
+
+# Then asset
+case "${asset}" in
+    '')                                      ;;
+    'user')                                  ;;
+    'pass')                                  ;;
+    'both')                                  ;;
+    *)      die "Asset ${asset} undefined"   ;;
+esac
+
+
+# Can't copy both
+[[ "${cmd} ${asset}" = 'copy both' ]] \
+    && die 'Cannot copy both'
+
+
+# Get passwords list
+pass_list=( "${passdir}"/**/*.gpg         )
+pass_list=( "${pass_list[@]%.gpg}"        )
+pass_list=( "${pass_list[@]#${passdir}/}" )
+
+
+# Find valid entries in password-store
+if [[ -n "${url}" ]]; then
+
+    # Shorten url
+    url="${url#*://}"
+    url="${url%%/*}"
+
+
+    # Extract maching values
+    declare -a match
+    for value in "${pass_list[@]}"; do
+        # TODO mail.domain should not match webmail.domain
+        [[ "${url%${value##*/}}" != "${url}" ]] && match+=( "${value}" )
+    done
+
+
+    # Handle number of matches
+    case "${#match[@]}" in
+        0) die "No match for ${url}"                                       ;;
+        1) selection="${match[0]}"                                         ;;
+        *) selection="$(printf '%s\n' "${match[@]}" | bemenu -ppassword:)" ;;
+    esac
+
+# Call menu on all password-store entries
+else
+    selection="$(printf '%s\n' "${pass_list[@]}" | bemenu -ppassword:)"
+
+fi
+
+
+# Empty selection
+[[ -z "${selection}" ]] && log "No selection... abort."
+
+
+# Read pass output, save it as argument for wtype
+declare -a content
+while read -r line; do content+=("${line}"); done < <(pass show "${selection}")
+
+pass="${content[0]}"
+user="${content[1]#username: }"
+both=( "${user}" -k Tab "${pass}" )
+
+
+# No argument: finally ask what to do
+if [[ -z "${cmd}" ]]; then
+    choices=( "type user" "type pass" "type both"
+              "copy user" "copy pass"             )
+    cmd="$(printf '%s\n' "${choices[@]}" | bemenu -paction:)"
+fi
+
+
+# Start insert mode if QUTE_URL is defined
+[[ -n "${QUTE_URL}" ]] && echo 'enter-mode insert' >> "${QUTE_FIFO}"
+
+
+# Execute (Last log: bemenu can accept any string, even not listed in menu)
+case "${cmd}" in
+    'type user') wtype -s 300 "${user}"           ;;
+    'type pass') wtype -s 300 "${pass}"           ;;
+    'type both') wtype -s 300 "${both[@]}"        ;;
+    'copy user') wl-copy "${user}"                ;;
+    'copy pass') wl-copy "${pass}"                ;;
+    *)           die "Command ${cmd} not allowed" ;;
+esac
+
+
+exit 0
